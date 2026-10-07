@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מעקב אימונים אישי</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Chart.js for Progress Graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts (Rubik) -->
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Rubik', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Rubik', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen pb-20 md:pb-0 md:pr-64 transition-colors duration-200">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 transform -translate-y-20 opacity-0 transition-all duration-300 ease-in-out bg-slate-800 text-white px-5 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-3 pointer-events-none">
+        <i id="toast-icon" class="fas fa-check-circle text-brand-500"></i>
+        <span id="toast-message" class="text-sm font-medium">הודעה</span>
+    </div>
+
+    <!-- Modal: Add New Exercise Master -->
+    <div id="add-exercise-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
+            <button onclick="closeAddExerciseModal()" class="absolute top-4 left-4 text-slate-400 hover:text-white p-2">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center">
+                    <i class="fas fa-plus text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">הוספת תרגיל חדש למאגר</h3>
+                    <p class="text-xs text-slate-400">התרגיל יישמר ויהיה זמין לבחירה מעכשיו</p>
+                </div>
+            </div>
+
+            <form id="new-exercise-form" onsubmit="handleSaveNewExerciseMaster(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">שם התרגיל:</label>
+                    <input type="text" id="new-exercise-name-input" placeholder="לדוגמה: סקואט, לחיצת חזה..." required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors">
+                </div>
+
+                <div class="pt-2 flex gap-3">
+                    <button type="submit" class="flex-1 bg-brand-600 hover:bg-brand-500 text-white font-medium py-2.5 rounded-xl transition-all shadow-lg shadow-brand-600/20 active:scale-95 text-sm">
+                        שמור תרגיל למאגר
+                    </button>
+                    <button type="button" onclick="closeAddExerciseModal()" class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-sm transition-colors">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Supabase Config Modal -->
+    <div id="config-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl relative">
+            <button onclick="closeConfigModal()" class="absolute top-4 left-4 text-slate-400 hover:text-white p-2">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                    <i class="fas fa-database text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">הגדרות סופהבייס (Supabase)</h3>
+                    <p class="text-xs text-slate-400">חיבור למסד הנתונים האישי שלך</p>
+                </div>
+            </div>
+
+            <form id="config-form" class="space-y-4" onsubmit="saveSupabaseConfig(event)">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Project URL</label>
+                    <input type="url" id="cfg-url" placeholder="https://xyz.supabase.co" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors" dir="ltr">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Anon / Public Key</label>
+                    <input type="password" id="cfg-key" placeholder="eyJhbGciOi..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors" dir="ltr">
+                </div>
+
+                <div class="pt-2 flex gap-3">
+                    <button type="submit" class="flex-1 bg-brand-600 hover:bg-brand-500 text-white font-medium py-2.5 rounded-xl transition-all shadow-lg shadow-brand-600/20 active:scale-95 text-sm">
+                        שמור והתחבר
+                    </button>
+                    <button type="button" onclick="useDemoMode()" class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-sm transition-colors">
+                        אחסון מקומי בלבד
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6 pt-4 border-t border-slate-700">
+                <button onclick="toggleSqlHelp()" class="text-xs text-brand-400 hover:underline flex items-center gap-1">
+                    <i class="fas fa-code"></i> הצג שאילתת SQL ליצירת טבלאות
+                </button>
+                <div id="sql-help" class="hidden mt-3 bg-slate-950 p-3 rounded-lg border border-slate-800 text-left text-xs font-mono text-emerald-400 overflow-x-auto max-h-48" dir="ltr">
+<pre>-- העתק והדבק ב-SQL Editor בסופהבייס:
+
+CREATE TABLE exercises (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE workouts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  date DATE NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE workout_exercises (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  workout_id UUID REFERENCES workouts(id) ON DELETE CASCADE,
+  exercise_name TEXT NOT NULL,
+  sets INT NOT NULL,
+  reps INT NOT NULL,
+  weight NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Navigation (Desktop) -->
+    <aside class="hidden md:flex flex-col fixed top-0 right-0 h-full w-64 bg-slate-800/90 backdrop-blur-md border-l border-slate-700/60 z-40 p-5">
+        <div class="flex items-center gap-3 px-2 py-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-slate-900 font-black text-xl shadow-lg">
+                <i class="fas fa-dumbbell"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-white leading-none">FitTrack</h1>
+                <span class="text-xs text-slate-400 font-medium">מעקב אימונים אישי</span>
+            </div>
+        </div>
+
+        <nav class="space-y-1.5 flex-1">
+            <button onclick="switchTab('home')" id="nav-desktop-home" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all text-sm">
+                <i class="fas fa-chart-line text-lg w-6"></i>
+                <span>בית</span>
+            </button>
+            <button onclick="switchTab('new-workout')" id="nav-desktop-new-workout" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all text-sm">
+                <i class="fas fa-plus-circle text-lg w-6"></i>
+                <span>אימון חדש</span>
+            </button>
+            <button onclick="switchTab('workout-history')" id="nav-desktop-workout-history" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all text-sm">
+                <i class="fas fa-history text-lg w-6"></i>
+                <span>היסטוריית אימונים</span>
+            </button>
+            <button onclick="switchTab('exercise-history')" id="nav-desktop-exercise-history" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all text-sm">
+                <i class="fas fa-list-check text-lg w-6"></i>
+                <span>היסטוריית תרגיל</span>
+            </button>
+        </nav>
+
+        <div class="pt-4 border-t border-slate-700/80">
+            <button onclick="openConfigModal()" class="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 text-slate-300 text-xs transition-colors border border-slate-700/50">
+                <span class="flex items-center gap-2">
+                    <span id="status-indicator" class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span id="status-text">אחסון מקומי</span>
+                </span>
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Bottom Navigation Bar (Mobile) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-800/95 backdrop-blur-md border-t border-slate-700/80 z-40 px-2 py-2 flex justify-around items-center">
+        <button onclick="switchTab('home')" id="nav-mobile-home" class="nav-item flex flex-col items-center py-1 px-3 text-slate-400 rounded-lg transition-all text-xs gap-1">
+            <i class="fas fa-chart-line text-lg"></i>
+            <span>בית</span>
+        </button>
+        <button onclick="switchTab('new-workout')" id="nav-mobile-new-workout" class="nav-item flex flex-col items-center py-1 px-3 text-slate-400 rounded-lg transition-all text-xs gap-1">
+            <i class="fas fa-plus-circle text-lg"></i>
+            <span>אימון</span>
+        </button>
+        <button onclick="switchTab('workout-history')" id="nav-mobile-workout-history" class="nav-item flex flex-col items-center py-1 px-3 text-slate-400 rounded-lg transition-all text-xs gap-1">
+            <i class="fas fa-history text-lg"></i>
+            <span>היסטוריה</span>
+        </button>
+        <button onclick="switchTab('exercise-history')" id="nav-mobile-exercise-history" class="nav-item flex flex-col items-center py-1 px-3 text-slate-400 rounded-lg transition-all text-xs gap-1">
+            <i class="fas fa-list-check text-lg"></i>
+            <span>תרגיל</span>
+        </button>
+    </nav>
+
+    <!-- Top Bar (Mobile header) -->
+    <header class="md:hidden flex items-center justify-between p-4 bg-slate-800/80 border-b border-slate-700/60 sticky top-0 z-30 backdrop-blur-md">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 text-slate-900 flex items-center justify-center font-bold">
+                <i class="fas fa-dumbbell text-sm"></i>
+            </div>
+            <h1 class="font-bold text-white text-base">FitTrack</h1>
+        </div>
+        <button onclick="openConfigModal()" class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-700 text-slate-300 flex items-center gap-1.5 border border-slate-600">
+            <span id="status-indicator-mobile" class="w-2 h-2 rounded-full bg-amber-500"></span>
+            <i class="fas fa-cog"></i>
+        </button>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+
+        <!-- TAB 1: HOME DASHBOARD -->
+        <section id="tab-home" class="tab-content space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-800 to-slate-800/60 p-6 rounded-2xl border border-slate-700/70 shadow-xl">
+                <div>
+                    <h2 class="text-2xl font-bold text-white mb-1">ברוך הבא! 💪</h2>
+                    <p class="text-slate-400 text-sm">הזן אימונים ועקוב אחר ההתקדמות שלך בקלות.</p>
+                </div>
+                <button onclick="switchTab('new-workout')" class="bg-brand-600 hover:bg-brand-500 text-white font-semibold px-5 py-3 rounded-xl transition-all shadow-lg shadow-brand-600/20 active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fas fa-plus"></i>
+                    <span>התחל אימון חדש</span>
+                </button>
+            </div>
+
+            <!-- Dashboard Stats Summary -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700/50">
+                    <span class="text-xs text-slate-400 font-medium block mb-1">אימון אחרון</span>
+                    <span id="stat-last-date" class="text-base font-bold text-white">טרם בוצע</span>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700/50">
+                    <span class="text-xs text-slate-400 font-medium block mb-1">ממוצע אימונים שבועי (א'-ש')</span>
+                    <span id="stat-weekly-avg" class="text-2xl font-bold text-brand-400">0.0</span>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700/50">
+                    <span class="text-xs text-slate-400 font-medium block mb-1">ממוצע אימונים חודשי</span>
+                    <span id="stat-monthly-avg" class="text-2xl font-bold text-emerald-400">0.0</span>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700/50">
+                    <span class="text-xs text-slate-400 font-medium block mb-1">סה"כ אימונים</span>
+                    <span id="stat-total-workouts" class="text-2xl font-bold text-white">0</span>
+                </div>
+            </div>
+
+            <!-- Progress Graph per Exercise -->
+            <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-700/50">
+                    <h3 class="font-bold text-lg text-white flex items-center gap-2">
+                        <i class="fas fa-chart-line text-brand-500"></i>
+                        <span>גרף התקדמות לפי תרגיל</span>
+                    </h3>
+                    <div class="w-full sm:w-64">
+                        <select id="dashboard-graph-exercise-select" onchange="renderDashboardGraph()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
+                            <option value="">-- בחר תרגיל להצגה --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="relative h-64 w-full flex items-center justify-center">
+                    <canvas id="dashboardChart"></canvas>
+                    <div id="chart-placeholder" class="absolute text-center text-slate-500">
+                        <i class="fas fa-chart-area text-4xl mb-2 block opacity-40"></i>
+                        <p class="text-xs">בחר תרגיל כדי לראות את גרף ההתקדמות לאורך זמן</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Last Workout Summary Section -->
+            <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-700/50">
+                    <h3 class="font-bold text-lg text-white flex items-center gap-2">
+                        <i class="fas fa-history text-brand-500"></i>
+                        <span>סיכום אימון אחרון</span>
+                    </h3>
+                    <span id="home-last-workout-date" class="text-xs bg-slate-700 text-slate-300 px-3 py-1 rounded-full font-medium">--</span>
+                </div>
+
+                <div id="home-last-workout-content" class="space-y-4">
+                    <div class="text-center py-8 text-slate-500">
+                        <i class="fas fa-dumbbell text-4xl mb-3 block opacity-40"></i>
+                        <p class="text-sm">עדיין לא נרשמו אימונים במערכת</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: NEW WORKOUT -->
+        <section id="tab-new-workout" class="tab-content space-y-6 hidden">
+            <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-700/60">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">רישום אימון חדש</h2>
+                        <p class="text-xs text-slate-400">בחר תאריך, בחר תרגיל מהרשימה והזן נתונים</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-medium text-slate-300">תאריך:</label>
+                        <input type="date" id="workout-date" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+
+                <!-- Add Exercise Controls -->
+                <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 mb-6 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider">בחירת תרגיל לאימון</label>
+                        <button type="button" onclick="openAddExerciseModal()" class="text-xs text-brand-400 hover:text-brand-300 font-medium flex items-center gap-1.5 transition-colors bg-brand-500/10 border border-brand-500/20 px-3 py-1 rounded-lg">
+                            <i class="fas fa-plus-circle"></i>
+                            <span>תרגיל חדש למאגר</span>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <!-- Select Exercise Dropdown -->
+                        <div class="sm:col-span-5">
+                            <select id="exercise-select-input" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500">
+                                <option value="">-- בחר תרגיל מהרשימה --</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <input type="number" id="input-sets" placeholder="סטים" min="1" value="3" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white text-center focus:outline-none focus:border-brand-500">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <input type="number" id="input-reps" placeholder="חזרות" min="1" value="10" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white text-center focus:outline-none focus:border-brand-500">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <input type="number" id="input-weight" placeholder="משקל (קג)" step="0.5" min="0" value="20" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white text-center focus:outline-none focus:border-brand-500">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-end pt-2">
+                        <button type="button" onclick="addExerciseToCurrentWorkout()" class="bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-brand-600/20 active:scale-95">
+                            <i class="fas fa-plus"></i>
+                            <span>הוסף תרגיל לאימון</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Current Workout Exercises List Table -->
+                <div class="space-y-3">
+                    <h3 class="text-sm font-bold text-slate-300">תרגילים באימון הנוכחי</h3>
+                    <div class="overflow-x-auto rounded-xl border border-slate-700/60">
+                        <table class="w-full text-right text-sm">
+                            <thead class="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700">
+                                <tr>
+                                    <th class="p-3">שם תרגיל</th>
+                                    <th class="p-3 text-center">סטים</th>
+                                    <th class="p-3 text-center">חזרות</th>
+                                    <th class="p-3 text-center">משקל (ק"ג)</th>
+                                    <th class="p-3 text-center">פעולות</th>
+                                </tr>
+                            </thead>
+                            <tbody id="current-workout-table" class="divide-y divide-slate-700/50 bg-slate-800/40">
+                                <tr id="empty-workout-row">
+                                    <td colspan="5" class="p-6 text-center text-slate-500">
+                                        עדיין לא הוספת תרגילים לאימון זה.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Notes & Save Button -->
+                <div class="mt-6 pt-4 border-t border-slate-700/60 space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">הערות לאימון (אופציונלי):</label>
+                        <input type="text" id="workout-notes" placeholder="איך היה האימון? הרגשה כללית..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500">
+                    </div>
+
+                    <button onclick="saveFullWorkout()" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-600/20 active:scale-95 flex items-center justify-center gap-2 text-base">
+                        <i class="fas fa-save"></i>
+                        <span>שמור אימון מלא</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: WORKOUT HISTORY (ACCORDION VIEW) -->
+        <section id="tab-workout-history" class="tab-content space-y-6 hidden">
+            <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+                <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/60">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">היסטוריית אימונים</h2>
+                        <p class="text-xs text-slate-400">לחץ על תאריך אימון כדי לפתוח ולהציג את הפירוט המלא</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-slate-700 flex items-center justify-center text-brand-400">
+                        <i class="fas fa-calendar-alt text-lg"></i>
+                    </div>
+                </div>
+
+                <div id="workout-history-container" class="space-y-3">
+                    <!-- Dynamic rendering of history accordion items -->
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: EXERCISE HISTORY -->
+        <section id="tab-exercise-history" class="tab-content space-y-6 hidden">
+            <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-700/60">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">היסטוריה לפי תרגיל</h2>
+                        <p class="text-xs text-slate-400">עקוב אחר התקדמות המשקלים והחזרות של תרגיל ספציפי</p>
+                    </div>
+                    <div class="w-full sm:w-64">
+                        <select id="exercise-filter-select" onchange="renderExerciseHistory()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500">
+                            <option value="">-- בחר תרגיל להצגה --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="exercise-history-container">
+                    <div class="text-center py-12 text-slate-500">
+                        <i class="fas fa-search text-4xl mb-3 block opacity-40"></i>
+                        <p class="text-sm">בחר תרגיל מהרשימה למעלה כדי לצפות בהיסטוריית הביצועים שלו</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        let supabaseClient = null;
+        let isDemoMode = true;
+
+        // Exercise Database Pool
+        let exercisesList = [];
+        let workoutsData = [];
+        let currentWorkoutExercises = [];
+
+        // Track open accordion card ID
+        let openWorkoutId = null;
+
+        // Chart Instance
+        let dashboardChartInstance = null;
+
+        window.onload = function() {
+            // Set default workout date to today
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('workout-date').value = today;
+
+            // Load LocalStorage Fallbacks
+            loadFromLocalStorage();
+
+            // Load saved Supabase Credentials
+            const savedUrl = localStorage.getItem('supabase_url');
+            const savedKey = localStorage.getItem('supabase_key');
+
+            if (savedUrl && savedKey) {
+                initSupabase(savedUrl, savedKey);
+            } else {
+                useDemoMode();
+            }
+
+            refreshAllData();
+            switchTab('home');
+        };
+
+        function loadFromLocalStorage() {
+            try {
+                const storedEx = localStorage.getItem('ft_exercises');
+                if (storedEx) exercisesList = JSON.parse(storedEx);
+
+                const storedWk = localStorage.getItem('ft_workouts');
+                if (storedWk) workoutsData = JSON.parse(storedWk);
+            } catch (e) {
+                console.error("Error reading LocalStorage", e);
+            }
+        }
+
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem('ft_exercises', JSON.stringify(exercisesList));
+                localStorage.setItem('ft_workouts', JSON.stringify(workoutsData));
+            } catch (e) {
+                console.error("Error writing LocalStorage", e);
+            }
+        }
+
+        function initSupabase(url, key) {
+            try {
+                if (window.supabase) {
+                    supabaseClient = window.supabase.createClient(url, key);
+                    isDemoMode = false;
+                    updateConnectionStatus(true);
+                    showToast('מחובר לסופהבייס בהצלחה', 'check');
+                    fetchDataFromSupabase();
+                } else {
+                    useDemoMode();
+                }
+            } catch (err) {
+                console.error("Supabase Initialization error:", err);
+                useDemoMode();
+                showToast('שגיאה בהתחברות, פועל במצב מקומי', 'exclamation-triangle');
+            }
+        }
+
+        function useDemoMode() {
+            isDemoMode = true;
+            supabaseClient = null;
+            updateConnectionStatus(false);
+            closeConfigModal();
+            refreshAllData();
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const indDesktop = document.getElementById('status-indicator');
+            const indMobile = document.getElementById('status-indicator-mobile');
+            const txt = document.getElementById('status-text');
+
+            if (isConnected) {
+                indDesktop.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50';
+                indMobile.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50';
+                txt.textContent = 'מחובר (Supabase)';
+            } else {
+                indDesktop.className = 'w-2 h-2 rounded-full bg-amber-500';
+                indMobile.className = 'w-2 h-2 rounded-full bg-amber-500';
+                txt.textContent = 'אחסון מקומי';
+            }
+        }
+
+        function saveSupabaseConfig(e) {
+            e.preventDefault();
+            const url = document.getElementById('cfg-url').value.trim();
+            const key = document.getElementById('cfg-key').value.trim();
+
+            if (!url || !key) {
+                showToast('יש למלא את כל השדות', 'exclamation-circle');
+                return;
+            }
+
+            localStorage.setItem('supabase_url', url);
+            localStorage.setItem('supabase_key', key);
+            initSupabase(url, key);
+            closeConfigModal();
+        }
+
+        async function fetchDataFromSupabase() {
+            if (isDemoMode || !supabaseClient) return;
+
+            try {
+                // Fetch exercises list
+                const { data: exData, error: exErr } = await supabaseClient
+                    .from('exercises')
+                    .select('name')
+                    .order('name');
+
+                if (!exErr && exData) {
+                    exercisesList = exData.map(e => e.name);
+                }
+
+                // Fetch Workouts
+                const { data: wData, error: wErr } = await supabaseClient
+                    .from('workouts')
+                    .select(`
+                        id,
+                        date,
+                        notes,
+                        workout_exercises (
+                            exercise_name,
+                            sets,
+                            reps,
+                            weight
+                        )
+                    `)
+                    .order('date', { ascending: false });
+
+                if (!wErr && wData) {
+                    workoutsData = wData.map(w => ({
+                        id: w.id,
+                        date: w.date,
+                        notes: w.notes || '',
+                        exercises: w.workout_exercises || []
+                    }));
+                }
+
+                saveToLocalStorage();
+                refreshAllData();
+            } catch (err) {
+                console.error("Error fetching Supabase data:", err);
+            }
+        }
+
+        function refreshAllData() {
+            populateExerciseDropdowns();
+            renderDashboardStats();
+            renderDashboardGraph();
+            renderLastWorkout();
+            renderWorkoutHistory();
+            renderExerciseHistory();
+        }
+
+        function populateExerciseDropdowns() {
+            const selectWorkout = document.getElementById('exercise-select-input');
+            const selectFilter = document.getElementById('exercise-filter-select');
+            const selectGraph = document.getElementById('dashboard-graph-exercise-select');
+
+            const currentWorkoutVal = selectWorkout.value;
+            const currentFilterVal = selectFilter.value;
+            const currentGraphVal = selectGraph.value;
+
+            selectWorkout.innerHTML = '<option value="">-- בחר תרגיל מהרשימה --</option>';
+            selectFilter.innerHTML = '<option value="">-- בחר תרגיל להצגה --</option>';
+            selectGraph.innerHTML = '<option value="">-- בחר תרגיל להצגה --</option>';
+
+            exercisesList.forEach(ex => {
+                const opt1 = document.createElement('option');
+                opt1.value = ex;
+                opt1.textContent = ex;
+                selectWorkout.appendChild(opt1);
+
+                const opt2 = document.createElement('option');
+                opt2.value = ex;
+                opt2.textContent = ex;
+                selectFilter.appendChild(opt2);
+
+                const opt3 = document.createElement('option');
+                opt3.value = ex;
+                opt3.textContent = ex;
+                selectGraph.appendChild(opt3);
+            });
+
+            if (currentWorkoutVal && exercisesList.includes(currentWorkoutVal)) {
+                selectWorkout.value = currentWorkoutVal;
+            }
+            if (currentFilterVal && exercisesList.includes(currentFilterVal)) {
+                selectFilter.value = currentFilterVal;
+            }
+            if (currentGraphVal && exercisesList.includes(currentGraphVal)) {
+                selectGraph.value = currentGraphVal;
+            } else if (exercisesList.length > 0 && !selectGraph.value) {
+                selectGraph.value = exercisesList[0];
+            }
+        }
+
+        function openAddExerciseModal() {
+            document.getElementById('new-exercise-name-input').value = '';
+            document.getElementById('add-exercise-modal').classList.remove('hidden');
+        }
+
+        function closeAddExerciseModal() {
+            document.getElementById('add-exercise-modal').classList.add('hidden');
+        }
+
+        async function handleSaveNewExerciseMaster(e) {
+            e.preventDefault();
+            const input = document.getElementById('new-exercise-name-input');
+            const newName = input.value.trim();
+
+            if (!newName) return;
+
+            if (exercisesList.includes(newName)) {
+                showToast('תרגיל זה כבר קיים במאגר', 'exclamation-triangle');
+                return;
+            }
+
+            exercisesList.push(newName);
+            exercisesList.sort();
+            saveToLocalStorage();
+
+            if (!isDemoMode && supabaseClient) {
+                try {
+                    await supabaseClient.from('exercises').insert([{ name: newName }]);
+                } catch (err) {
+                    console.error('Error saving exercise to Supabase:', err);
+                }
+            }
+
+            populateExerciseDropdowns();
+            document.getElementById('exercise-select-input').value = newName;
+            document.getElementById('dashboard-graph-exercise-select').value = newName;
+            closeAddExerciseModal();
+            showToast('התרגיל נוסף בהצלחה למאגר', 'check');
+            renderDashboardGraph();
+        }
+
+        function addExerciseToCurrentWorkout() {
+            const selectEl = document.getElementById('exercise-select-input');
+            const exName = selectEl.value;
+            const sets = parseInt(document.getElementById('input-sets').value);
+            const reps = parseInt(document.getElementById('input-reps').value);
+            const weight = parseFloat(document.getElementById('input-weight').value);
+
+            if (!exName) {
+                showToast('אנא בחר תרגיל מהרשימה', 'exclamation-circle');
+                return;
+            }
+            if (!sets || sets <= 0 || !reps || reps <= 0 || isNaN(weight) || weight < 0) {
+                showToast('יש להזין ערכים תקינים לסטים, חזרות ומשקל', 'exclamation-circle');
+                return;
+            }
+
+            currentWorkoutExercises.push({
+                exercise_name: exName,
+                sets,
+                reps,
+                weight
+            });
+
+            renderCurrentWorkoutTable();
+            showToast('התרגיל נוסף לאימון', 'check');
+        }
+
+        function removeExerciseFromCurrentWorkout(index) {
+            currentWorkoutExercises.splice(index, 1);
+            renderCurrentWorkoutTable();
+        }
+
+        function renderCurrentWorkoutTable() {
+            const tbody = document.getElementById('current-workout-table');
+            tbody.innerHTML = '';
+
+            if (currentWorkoutExercises.length === 0) {
+                tbody.innerHTML = `
+                    <tr id="empty-workout-row">
+                        <td colspan="5" class="p-6 text-center text-slate-500">
+                            עדיין לא הוספת תרגילים לאימון זה.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            currentWorkoutExercises.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/80 transition-colors";
+                tr.innerHTML = `
+                    <td class="p-3 font-medium text-white">${item.exercise_name}</td>
+                    <td class="p-3 text-center text-slate-300">${item.sets}</td>
+                    <td class="p-3 text-center text-slate-300">${item.reps}</td>
+                    <td class="p-3 text-center font-bold text-brand-400">${item.weight} ק"ג</td>
+                    <td class="p-3 text-center">
+                        <button onclick="removeExerciseFromCurrentWorkout(${idx})" class="text-rose-400 hover:text-rose-300 p-1">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function saveFullWorkout() {
+            const date = document.getElementById('workout-date').value;
+            const notes = document.getElementById('workout-notes').value.trim();
+
+            if (!date) {
+                showToast('יש לבחור תאריך לאימון', 'exclamation-circle');
+                return;
+            }
+            if (currentWorkoutExercises.length === 0) {
+                showToast('יש להוסיף לפחות תרגיל אחד לאימון', 'exclamation-circle');
+                return;
+            }
+
+            const newWorkoutObj = {
+                id: 'w-' + Date.now(),
+                date,
+                notes,
+                exercises: [...currentWorkoutExercises]
+            };
+
+            if (!isDemoMode && supabaseClient) {
+                try {
+                    const { data: wRes, error: wErr } = await supabaseClient
+                        .from('workouts')
+                        .insert([{ date, notes }])
+                        .select('id')
+                        .single();
+
+                    if (wErr) throw wErr;
+
+                    const exRows = currentWorkoutExercises.map(e => ({
+                        workout_id: wRes.id,
+                        exercise_name: e.exercise_name,
+                        sets: e.sets,
+                        reps: e.reps,
+                        weight: e.weight
+                    }));
+
+                    const { error: exErr } = await supabaseClient
+                        .from('workout_exercises')
+                        .insert(exRows);
+
+                    if (exErr) throw exErr;
+
+                    newWorkoutObj.id = wRes.id;
+                } catch (err) {
+                    console.error("Error saving workout to Supabase:", err);
+                    showToast('שגיאה בשמירה לענן, נשמר בלבד מקומית', 'exclamation-triangle');
+                }
+            }
+
+            workoutsData.unshift(newWorkoutObj);
+            workoutsData.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            saveToLocalStorage();
+
+            currentWorkoutExercises = [];
+            document.getElementById('workout-notes').value = '';
+            renderCurrentWorkoutTable();
+
+            refreshAllData();
+            showToast('האימון נשמר בהצלחה! 🎉', 'check');
+            switchTab('home');
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('bg-brand-600/20', 'text-brand-400', 'font-bold');
+                el.classList.add('text-slate-300', 'hover:bg-slate-700/50');
+            });
+
+            const activeDesktop = document.getElementById(`nav-desktop-${tabId}`);
+            const activeMobile = document.getElementById(`nav-mobile-${tabId}`);
+
+            if (activeDesktop) {
+                activeDesktop.classList.add('bg-brand-600/20', 'text-brand-400', 'font-bold');
+                activeDesktop.classList.remove('text-slate-300');
+            }
+            if (activeMobile) {
+                activeMobile.classList.add('text-brand-400', 'font-bold');
+                activeMobile.classList.remove('text-slate-400');
+            }
+
+            if (tabId === 'home') {
+                setTimeout(renderDashboardGraph, 50);
+            }
+        }
+
+        // --- STATS CALCULATIONS (WEEKLY SUNDAY-SATURDAY & MONTHLY) ---
+        function renderDashboardStats() {
+            document.getElementById('stat-total-workouts').textContent = workoutsData.length;
+
+            if (workoutsData.length === 0) {
+                document.getElementById('stat-last-date').textContent = 'טרם בוצע';
+                document.getElementById('stat-weekly-avg').textContent = '0.0';
+                document.getElementById('stat-monthly-avg').textContent = '0.0';
+                return;
+            }
+
+            // 1. Last Workout Date
+            document.getElementById('stat-last-date').textContent = formatDate(workoutsData[0].date);
+
+            // 2. Weekly Workout Average (Sunday to Saturday framing)
+            const weeklyCountMap = {};
+            workoutsData.forEach(w => {
+                if (!w.date) return;
+                const d = new Date(w.date);
+                // Calculate Start of Week (Sunday)
+                const dayOfWeek = d.getDay(); // 0 is Sunday in JS
+                const sundayDate = new Date(d);
+                sundayDate.setDate(d.getDate() - dayOfWeek);
+                const weekKey = sundayDate.toISOString().split('T')[0];
+
+                weeklyCountMap[weekKey] = (weeklyCountMap[weekKey] || 0) + 1;
+            });
+
+            const totalWeeksTracked = Object.keys(weeklyCountMap).length || 1;
+            const totalWeeklyWorkouts = Object.values(weeklyCountMap).reduce((a, b) => a + b, 0);
+            const weeklyAvg = (totalWeeklyWorkouts / totalWeeksTracked).toFixed(1);
+            document.getElementById('stat-weekly-avg').textContent = weeklyAvg;
+
+            // 3. Monthly Workout Average
+            const monthlyCountMap = {};
+            workoutsData.forEach(w => {
+                if (!w.date) return;
+                const monthKey = w.date.substring(0, 7); // YYYY-MM
+                monthlyCountMap[monthKey] = (monthlyCountMap[monthKey] || 0) + 1;
+            });
+
+            const totalMonthsTracked = Object.keys(monthlyCountMap).length || 1;
+            const totalMonthlyWorkouts = Object.values(monthlyCountMap).reduce((a, b) => a + b, 0);
+            const monthlyAvg = (totalMonthlyWorkouts / totalMonthsTracked).toFixed(1);
+            document.getElementById('stat-monthly-avg').textContent = monthlyAvg;
+        }
+
+        // --- DASHBOARD PROGRESS GRAPH (CHART.JS) ---
+        function renderDashboardGraph() {
+            const selectEl = document.getElementById('dashboard-graph-exercise-select');
+            const selectedEx = selectEl.value;
+            const placeholder = document.getElementById('chart-placeholder');
+            const canvas = document.getElementById('dashboardChart');
+
+            if (!selectedEx) {
+                placeholder.classList.remove('hidden');
+                if (dashboardChartInstance) {
+                    dashboardChartInstance.destroy();
+                    dashboardChartInstance = null;
+                }
+                return;
+            }
+
+            // Gather chronologically ordered data points for selected exercise
+            const points = [];
+            const sortedWorkouts = [...workoutsData].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            sortedWorkouts.forEach(w => {
+                (w.exercises || []).forEach(ex => {
+                    if (ex.exercise_name === selectedEx) {
+                        points.push({
+                            date: formatDate(w.date),
+                            weight: ex.weight
+                        });
+                    }
+                });
+            });
+
+            if (points.length === 0) {
+                placeholder.classList.remove('hidden');
+                if (dashboardChartInstance) {
+                    dashboardChartInstance.destroy();
+                    dashboardChartInstance = null;
+                }
+                return;
+            }
+
+            placeholder.classList.add('hidden');
+
+            const labels = points.map(p => p.date);
+            const dataWeights = points.map(p => p.weight);
+
+            if (dashboardChartInstance) {
+                dashboardChartInstance.destroy();
+            }
+
+            const ctx = canvas.getContext('2d');
+            dashboardChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `משקל (ק"ג) - ${selectedEx}`,
+                        data: dataWeights,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: '#22c55e',
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#e2e8f0',
+                                font: { family: 'Rubik', size: 12 }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#94a3b8', font: { family: 'Rubik', size: 11 } },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        },
+                        y: {
+                            ticks: { color: '#94a3b8', font: { family: 'Rubik', size: 11 } },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderLastWorkout() {
+            const container = document.getElementById('home-last-workout-content');
+            const dateLabel = document.getElementById('home-last-workout-date');
+
+            if (workoutsData.length === 0) {
+                dateLabel.textContent = '--';
+                container.innerHTML = `
+                    <div class="text-center py-8 text-slate-500">
+                        <i class="fas fa-dumbbell text-4xl mb-3 block opacity-40"></i>
+                        <p class="text-sm">עדיין לא נרשמו אימונים במערכת</p>
+                    </div>`;
+                return;
+            }
+
+            const lastWorkout = workoutsData[0];
+            dateLabel.textContent = formatDate(lastWorkout.date);
+
+            let exercisesHtml = '';
+            (lastWorkout.exercises || []).forEach(ex => {
+                exercisesHtml += `
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-700/50">
+                        <div>
+                            <span class="font-medium text-white text-sm block">${ex.exercise_name}</span>
+                            <span class="text-xs text-slate-400">${ex.sets} סטים × ${ex.reps} חזרות</span>
+                        </div>
+                        <div class="text-brand-400 font-bold text-sm bg-brand-500/10 px-3 py-1 rounded-lg border border-brand-500/20">
+                            ${ex.weight} ק"ג
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = `
+                ${lastWorkout.notes ? `<div class="text-xs text-slate-300 italic mb-3 bg-slate-900/40 p-2.5 rounded-lg">💬 "${lastWorkout.notes}"</div>` : ''}
+                <div class="space-y-2">
+                    ${exercisesHtml}
+                </div>
+            `;
+        }
+
+        function toggleWorkoutAccordion(id) {
+            openWorkoutId = (openWorkoutId === id) ? null : id;
+            renderWorkoutHistory();
+        }
+
+        function renderWorkoutHistory() {
+            const container = document.getElementById('workout-history-container');
+            container.innerHTML = '';
+
+            if (workoutsData.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-slate-500">
+                        <i class="fas fa-history text-4xl mb-3 block opacity-40"></i>
+                        <p class="text-sm">אין אימונים רשומים בהיסטוריה</p>
+                    </div>`;
+                return;
+            }
+
+            workoutsData.forEach(w => {
+                const isOpen = openWorkoutId === w.id;
+                const card = document.createElement('div');
+                card.className = "bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden transition-all duration-200 hover:border-slate-600";
+
+                let exercisesRows = '';
+                (w.exercises || []).forEach(ex => {
+                    exercisesRows += `
+                        <div class="flex items-center justify-between py-2 border-b border-slate-800/80 last:border-0 text-sm">
+                            <span class="text-slate-200 font-medium">${ex.exercise_name}</span>
+                            <div class="flex items-center gap-4 text-xs">
+                                <span class="text-slate-400">${ex.sets} סטים | ${ex.reps} חזרות</span>
+                                <span class="font-bold text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">${ex.weight} ק"ג</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                card.innerHTML = `
+                    <!-- Accordion Header (Card Outside) -->
+                    <button onclick="toggleWorkoutAccordion('${w.id}')" class="w-full flex items-center justify-between p-4 text-right hover:bg-slate-800/50 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-brand-400 border border-slate-700">
+                                <i class="fas fa-calendar-day"></i>
+                            </div>
+                            <div>
+                                <span class="font-bold text-white text-sm block">${formatDate(w.date)}</span>
+                                <span class="text-xs text-slate-400">${(w.exercises || []).length} תרגילים בוצעו</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs text-slate-400 ${isOpen ? 'rotate-180' : ''} transition-transform duration-200">
+                                <i class="fas fa-chevron-down"></i>
+                            </span>
+                        </div>
+                    </button>
+
+                    <!-- Accordion Content (Collapsible Inside) -->
+                    <div class="${isOpen ? 'block' : 'hidden'} px-4 pb-4 pt-2 bg-slate-950/40 border-t border-slate-800">
+                        ${w.notes ? `<p class="text-xs text-slate-400 italic mb-3 bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/40">💬 "${w.notes}"</p>` : ''}
+                        <div class="space-y-1">
+                            ${exercisesRows}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderExerciseHistory() {
+            const selectedEx = document.getElementById('exercise-filter-select').value;
+            const container = document.getElementById('exercise-history-container');
+
+            if (!selectedEx) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-slate-500">
+                        <i class="fas fa-search text-4xl mb-3 block opacity-40"></i>
+                        <p class="text-sm">בחר תרגיל מהרשימה למעלה כדי לצפות בהיסטוריית הביצועים שלו</p>
+                    </div>`;
+                return;
+            }
+
+            const logs = [];
+            workoutsData.forEach(w => {
+                (w.exercises || []).forEach(ex => {
+                    if (ex.exercise_name === selectedEx) {
+                        logs.push({
+                            date: w.date,
+                            sets: ex.sets,
+                            reps: ex.reps,
+                            weight: ex.weight
+                        });
+                    }
+                });
+            });
+
+            if (logs.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-slate-500">
+                        <i class="fas fa-dumbbell text-4xl mb-3 block opacity-40"></i>
+                        <p class="text-sm">לא נמצאו אימונים קודמים עבור תרגיל זה</p>
+                    </div>`;
+                return;
+            }
+
+            let tableRows = '';
+            logs.forEach(log => {
+                tableRows += `
+                    <tr class="hover:bg-slate-800/80 transition-colors">
+                        <td class="p-3 font-medium text-white">${formatDate(log.date)}</td>
+                        <td class="p-3 text-center text-slate-300">${log.sets}</td>
+                        <td class="p-3 text-center text-slate-300">${log.reps}</td>
+                        <td class="p-3 text-center font-bold text-brand-400">${log.weight} ק"ג</td>
+                    </tr>
+                `;
+            });
+
+            container.innerHTML = `
+                <div class="overflow-x-auto rounded-xl border border-slate-700/60">
+                    <table class="w-full text-right text-sm">
+                        <thead class="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700">
+                            <tr>
+                                <th class="p-3">תאריך</th>
+                                <th class="p-3 text-center">סטים</th>
+                                <th class="p-3 text-center">חזרות</th>
+                                <th class="p-3 text-center">משקל</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700/50 bg-slate-800/40">
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const [year, month, day] = dateStr.split('-');
+            return `${day}/${month}/${year}`;
+        }
+
+        function showToast(msg, icon = 'check-circle') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.textContent = msg;
+            toastIcon.className = `fas fa-${icon} text-brand-400`;
+
+            toast.classList.remove('-translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('-translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function openConfigModal() {
+            document.getElementById('cfg-url').value = localStorage.getItem('supabase_url') || '';
+            document.getElementById('cfg-key').value = localStorage.getItem('supabase_key') || '';
+            document.getElementById('config-modal').classList.remove('hidden');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('config-modal').classList.add('hidden');
+        }
+
+        function toggleSqlHelp() {
+            const help = document.getElementById('sql-help');
+            help.classList.toggle('hidden');
+        }
+    </script>
+</body>
+</html>
